@@ -93,4 +93,4 @@ $fileName = __DIR__ ."/GooglePlaySept2018.xlsx";
 
 $pdfHelper = new PDFHelper();
 $pdfHelper->getWorksheet($fileName);
-echo $pdfHelper->getCSV();
+echo $pdfHelper->getHTML();
