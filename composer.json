@@ -1,0 +1,13 @@
+{
+  "config": {
+    "platform": {
+        "php": "7.1.23"
+    }
+},
+  "require": {
+     "monolog/monolog": "1.0.*",
+    "phpunit/php-timer": "^2.0",
+    "dompdf/dompdf": "^0.8.3",
+    "phpoffice/phpspreadsheet": "^1.6"
+  }
+}
