@@ -27,13 +27,26 @@ class MyReadFilter implements \PhpOffice\PhpSpreadsheet\Reader\IReadFilter
             }
         }
         return false;
+        //  Read rows 1 to 7 and columns A to E only
+        // if ($row >= 7 && $row <= 20) {
+        //     if (in_array($column,range('A','E'))) {
+        //         return true;
+        //     }
+        // }
+        return false;
     }
 }
 
 class PDFHelper {
     private $fileName;
-    private $minPageNum = 1;
-    private $maxPageNum = 20;
+    private $paginator = 200;
+    public $minPageNum = 0;
+    public $maxPageNum;
+    public $totalPages;
+    public $totalRow;
+    public $currentPage;
+    public $nextPage;
+    public $prevPage;
     private $worksheet;
     private $spreadsheet;
 
@@ -42,13 +55,19 @@ class PDFHelper {
         $filterSubset = new MyReadFilter($this->minPageNum, $this->maxPageNum,range('A','Y'));
 
         $reader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
-        // $reader->setLoadSheetsOnly("Sheet1");
+        $unfilteredReader = new \PhpOffice\PhpSpreadsheet\Reader\Xlsx();
+        $reader->setLoadSheetsOnly("Sheet1");
+        $unfilteredReader->setLoadSheetsOnly("Sheet1");
+        $this->totalRow = $reader->load($fileName)->getActiveSheet()->getHighestDataRow();
+        $this->totalPages = round($this->totalRow / $this->paginator);
         if ($download == false){
             $reader->setReadFilter($filterSubset);
         }
         $this->fileName = $fileName;
         $this->spreadsheet = $reader->load($fileName);
+        $this->unfilteredSpreadsheet = $unfilteredReader->load($fileName);
         $this->worksheet = $this->spreadsheet->getSheet(0)->toArray(null, true, true, true);
+        $this->unfilteredWorksheet = $this->unfilteredSpreadsheet->getSheet(0)->toArray(null, true, true, true);
 
         return $this->worksheet;
     }
@@ -56,13 +75,20 @@ class PDFHelper {
     public function getTable($download=false){
         //html table with the excel file data
         $this->getWorksheet($this->fileName, $download);
-        $html_tb ='<font size="1" face="Courier New" >';
-        $html_tb .='<table class="table" border="1"><tr><th>'. implode('</th><th>', $this->worksheet[1]) .'</th></tr>';
-        $nr = count($this->worksheet); //number of rows
-        for($i=2; $i<=$nr; $i++){
-            $html_tb .='<tr><td>'. implode('</td><td>', $this->worksheet[$i]) .'</td></tr>';
+        // print_r ($this->worksheet);
+        // $nr = count(array_filter($this->worksheet)); //number of rows
+        // echo $nr.'Opps'. $this->totalRow;
+        $html_tb ='';
+        $html_tb .='<table class="table" style="font-size:10px;" border="1"><tr><th>SN</th><th>'. implode('</th><th>', $this->unfilteredWorksheet[1]) .'</th></tr>';
+        // $html_tb .='<table class="table" style="font-size:10px;" border="1">';
+        $startNum = ($this->currentPage == 1?$startNum = 2:$this->minPageNum);
+        for($i=$startNum; $i<=$this->maxPageNum; $i++){
+            if ($i > $this->totalRow){
+                break;
+            }
+            $html_tb .='<tr><td>'.$i.'</td><td>'. implode('</td><td>', $this->worksheet[$i]) .'</td></tr>';
         }
-        $html_tb .='</table></font>';
+        $html_tb .='</table>';
 
         return $html_tb;
     }
@@ -70,31 +96,33 @@ class PDFHelper {
     public function getHtml(){
         // added you custome html here to render the table
         // it will also have the button and pagination
-        $html = '
         //combo box to show a number of records per npage
-        <div>
-        <form action="index.php" method="post">
-        <label for="show_entries"> Show Entries : </label>
-        <select id="show_entries" name="show_entries" >
-           <option value="1">10</option>
-           <option value="2">20</option>
-           <option value="3">50</option>
-           <option value="4">100</option>
-        </select>
-
-        <input type="submit" name="search" value="Search"/>
-        </form>';
+        $html = '
+        <div>' .
+        'Total Pages: '. $this->totalPages.
+        ' ------ Total Number of Rows: '. $this->totalRow.
+        ' ------ Current Page: '. $this->currentPage.
+        ' ------ Current Viewing Page: '. $this->minPageNum .' - '. $this->maxPageNum.
+        '</br></br>';
 
         $html .= $this->getTable();
-        $html .=    '<form >
-                <a href="?file=csv">
-                <button type="button" onclick="downloadCSV()"> Download CSV </button>
-                </a>
-                <a href="?file=pdf">
-                <button type="button" onclick="downloadPDF()"> Download PDF </button>
-                </a>
-                
-            </form></div>';
+        if ($this->currentPage > 1){
+            $html .= "<a href='?page={$this->prevPage}'><button>Prev</button></a> &nbsp; &nbsp;";
+        }
+        if ($this->currentPage < $this->totalPages){
+            // $html .= '<a href=\"?pa÷ge='. $this->currentPage + 1 .'\"><button>Next</button></a> &nbsp; &nbsp;';
+            $html .= "<a href='?page={$this->nextPage}'><button>Next</button></a> &nbsp; &nbsp;";
+        }
+        $html .= '
+            <a href="?file=csv">
+            <button type="button" onclick="downloadCSV()"> Download CSV </button>
+            </a>
+
+            <a href="?file=pdf&page='.$this->currentPage.'">
+            <button type="button" onclick="downloadPDF()"> Download PDF </button>
+            </a>
+
+        </div>';
         return $html;
     }
 
@@ -104,15 +132,29 @@ class PDFHelper {
         header('Content-Disposition: attachment;filename="myfile.csv"');
         header('Cache-Control: max-age=0');
 
-        $this->getWorksheet($this.$this->fileName, true);
+        $this->getWorksheet($this->fileName, true);
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Csv($this->spreadsheet);
         $writer->save('php://output');
+    }
+
+    function loadPageDependency($fileName){
+        $this->getWorksheet($fileName);
+        if (isset($_GET['page']) && $_GET['page'] != 0) {
+            $this->currentPage = $_GET['page'];
+        }else{
+            $this->currentPage = 1;
+        }
+
+        $this->nextPage = (int)$this->currentPage + 1;
+        $this->prevPage = (int)$this->currentPage - 1;
+        $this->maxPageNum = $this->currentPage * $this->paginator;
+        $this->minPageNum = (int)$this->prevPage * $this->paginator;
     }
 
     function getPDF(){
         // instantiate and use the dompdf class
         $dompdf = new Dompdf();
-        $dompdf->loadHtml($this->getTable(true));
+        $dompdf->loadHtml($this->getTable());
 
         // (Optional) Setup the paper size and orientation
         $dompdf->setPaper('A2', 'landscape');
@@ -129,7 +171,9 @@ class PDFHelper {
 $fileName = __DIR__ ."/GooglePlaySept2018.xlsx";
 
 $pdfHelper = new PDFHelper();
-$pdfHelper->getWorksheet($fileName);
+
+$pdfHelper->loadPageDependency($fileName);
+
 
 if (isset($_GET['file'])){
     if ($_GET['file'] == 'pdf') {
@@ -137,7 +181,8 @@ if (isset($_GET['file'])){
     }elseif ($_GET['file'] == 'csv'){
         echo $pdfHelper->getCSV();
     }
+}else{
+    echo $pdfHelper->getHtml();
 }
-//echo $_SERVER['minPage'];
-//echo $_SERVER['maxPage'];
-echo $pdfHelper->getHtml();
+// echo $_SERVER['minPage'];
+// echo $_SERVER['maxPage'];
