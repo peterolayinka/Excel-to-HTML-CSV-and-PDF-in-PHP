@@ -8,4 +8,4 @@
 
 `memory_limit=512M`
 
-*for sample sake, the pdf is first 200 list in the excel doc. due to long waiting time to build pdf for such large data*
+*for performace sake, the pdf button compiles the current page as pdf from the excel doc, due to the long waiting time to build pdf for such large data*
